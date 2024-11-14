@@ -382,23 +382,25 @@ export const createFullscreenCanvas = () => {
   let resizeScheduled = false;
 
   const resize = () => {
+    activeOutlines = [];
+    pendingOutlines = [];
+
     const dpi = window.devicePixelRatio;
-    canvas.width = dpi * (window.visualViewport?.width ?? window.innerWidth);
-    canvas.height = dpi * (window.visualViewport?.height ?? window.innerHeight);
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.clientHeight;
+
+    canvas.width = dpi * width;
+    canvas.height = dpi * height;
+
+    ctx?.setTransform(1, 0, 0, 1, 0, 0);
     ctx?.scale(dpi, dpi);
+
     resizeScheduled = false;
   };
 
   resize();
 
-  window.addEventListener('resize', () => {
-    if (!resizeScheduled) {
-      resizeScheduled = true;
-      requestAnimationFrame(() => {
-        resize();
-      });
-    }
-  });
+  const events = ['resize', 'scroll', 'touchend', 'orientationchange'];
 
   const handleViewportChange = debounce(() => {
     if (!resizeScheduled) {
@@ -409,12 +411,10 @@ export const createFullscreenCanvas = () => {
     }
   }, 100);
 
-  window.addEventListener('resize', handleViewportChange);
-  window.addEventListener('scroll', handleViewportChange);
-  // disabled by default in Firefox
-  // https://rdavis.io/articles/dealing-with-the-visual-viewport
-  window.visualViewport?.addEventListener('resize', handleViewportChange);
-  window.visualViewport?.addEventListener('scroll', handleViewportChange);
+  for (let i = 0, len = events.length; i < len; i++) {
+    const event = events[i];
+    window.addEventListener(event, handleViewportChange, { passive: true });
+  }
 
   onIdle(() => {
     const prevCanvas = document.getElementById('react-scan-canvas');
@@ -424,7 +424,14 @@ export const createFullscreenCanvas = () => {
     document.documentElement.appendChild(canvas);
   });
 
-  return ctx;
+  const cleanup = () => {
+    for (let i = 0, len = events.length; i < len; i++) {
+      const event = events[i];
+      window.removeEventListener(event, handleViewportChange);
+    }
+  };
+
+  return { ctx, cleanup };
 };
 
 export const createStatus = () => {
