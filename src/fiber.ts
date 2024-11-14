@@ -1,5 +1,6 @@
 import type { Fiber, FiberRoot } from 'react-reconciler';
-import { NO_OP } from './utils';
+import * as React from 'react';
+import { didChange, NO_OP } from './utils';
 import type { Renderer } from './types';
 
 const PerformedWorkFlag = 0b01;
@@ -9,6 +10,11 @@ const ContextConsumerTag = 9;
 const ForwardRefTag = 11;
 const MemoComponentTag = 14;
 const SimpleMemoComponentTag = 15;
+
+const ReactSharedInternals =
+  (React as any)
+    ?.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE ||
+  (React as any)?.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
 
 export const didFiberRender = (fiber: Fiber | null): boolean => {
   if (!fiber) return true; // mount (probably)
@@ -129,83 +135,110 @@ export const registerDevtoolsHook = ({
     onCommitFiberRoot(rendererID, root);
   };
 
-  // const renderersArray = Array.from(devtoolsHook.renderers.values());
-  // for (let i = 0, len = renderersArray.length; i < len; i++) {
-  //   const renderer = renderersArray[i];
-  //   controlDispatcherRef(renderer.currentDispatcherRef);
-  // }
+  if (ReactSharedInternals) {
+    controlDispatcherRef(ReactSharedInternals);
+  }
 
   return devtoolsHook;
 };
 
-// TODO: check useMemo / useCallback / useMemoCache (React Compiler)
+const REACT_MAJOR_VERSION = Number(React.version.split('.')[0]);
+const dispatcherRefs = new Set();
 
-// const REACT_MAJOR_VERSION = Number(React.version.split('.')[0]);
-// const dispatcherRefs = new Set();
+export const controlDispatcherRef = (currentDispatcherRef: any) => {
+  const ref = currentDispatcherRef;
+  if (ref && !dispatcherRefs.has(ref)) {
+    // Renamed to ".H" in React 19
+    const propName = REACT_MAJOR_VERSION > 18 ? 'H' : 'current';
+    let currentDispatcher = ref[propName];
+    const seenDispatchers = new Set();
 
-// export const controlDispatcherRef = (currentDispatcherRef: any) => {
-//   const ref = currentDispatcherRef;
-//   if (ref && !dispatcherRefs.has(ref)) {
-//     // Renamed to ".H" in React 19
-//     const propName = REACT_MAJOR_VERSION > 18 ? 'H' : 'current';
-//     let currentDispatcher = ref[propName];
-//     const seenDispatchers = new Set();
+    const callbackCache = new Map<string, any[]>();
+    const memoCache = new Map<string, any[]>();
 
-//     Object.defineProperty(ref, propName, {
-//       get: () => currentDispatcher,
-//       set(current: any) {
-//         currentDispatcher = current;
+    Object.defineProperty(ref, propName, {
+      get: () => currentDispatcher,
+      set(current: any) {
+        currentDispatcher = current;
 
-//         if (
-//           !current ||
-//           seenDispatchers.has(current) ||
-//           current.useRef === current.useImperativeHandle ||
-//           /warnInvalidContextAccess\(\)/.test(current.readContext.toString())
-//         ) {
-//           return;
-//         }
-//         seenDispatchers.add(current);
-//         const isInComponent = peekIsInComponent(current);
-//         if (!isInComponent) return;
-//         const prevUseCallback = current.useCallback;
-//         const useCallback = (fn: (...args: any[]) => any, deps: any[]) => {
-//           return prevUseCallback(fn, deps);
-//         };
-//         current.useCallback = useCallback;
+        if (
+          !current ||
+          seenDispatchers.has(current) ||
+          current.useRef === current.useImperativeHandle ||
+          /warnInvalidContextAccess\(\)/.test(current.readContext.toString())
+        ) {
+          return;
+        }
+        seenDispatchers.add(current);
+        const isInComponent = peekIsInComponent(current);
+        if (!isInComponent) return;
+        const prevUseCallback = current.useCallback;
+        const useCallback = (fn: (...args: any[]) => any, deps: any[]) => {
+          try {
+            const key = fn.toString();
+            const prevDeps = callbackCache.get(key);
+            if (prevDeps && prevDeps.length === deps.length) {
+              for (let i = 0; i < prevDeps.length; i++) {
+                const changed = didChange(prevDeps[i], deps[i]);
+                if (!changed) break;
+                // do something
+              }
+            }
+            callbackCache.set(key, deps);
+          } catch (_err) {
+            /**/
+          }
+          return prevUseCallback(fn, deps);
+        };
+        current.useCallback = useCallback;
 
-//         const prevUseMemo = current.useMemo;
-//         const useMemo = (fn: (...args: any[]) => any, deps: any[]) => {
-//           return prevUseMemo(fn, deps);
-//         };
-//         current.useMemo = useMemo;
-//       },
-//     });
-//     dispatcherRefs.add(ref);
-//   }
-// };
+        const prevUseMemo = current.useMemo;
+        const useMemo = (fn: (...args: any[]) => any, deps: any[]) => {
+          try {
+            const key = fn.toString();
+            const prevDeps = callbackCache.get(key);
+            if (prevDeps && prevDeps.length === deps.length) {
+              for (let i = 0; i < prevDeps.length; i++) {
+                const changed = didChange(prevDeps[i], deps[i]);
+                if (!changed) break;
+                // do something
+              }
+            }
+            memoCache.set(key, deps);
+          } catch (_err) {
+            /**/
+          }
+          return prevUseMemo(fn, deps);
+        };
+        current.useMemo = useMemo;
+      },
+    });
+    dispatcherRefs.add(ref);
+  }
+};
 
-// const invalidHookErrFunctions = new WeakMap<() => void, boolean>();
+const invalidHookErrFunctions = new WeakMap<() => void, boolean>();
 
-// /**
-//  * Check if you can currently run hooks in a component. This avoids allocting
-//  * a new hook on the stack by "peeking." Note that this doesn't correctly handle some cases
-//  * For example, if you are iterating through Array.map, it won't check if you allocate more/less hooks between renders
-//  *
-//  * This function checks the current dispatcher, which is swapped with an invalid / valid state by React. If
-//  * the current dispatcher is invalid (includes the string ("Error")), it will return false.
-//  */
-// export const peekIsInComponent = (
-//   dispatcher: Record<string, () => void>,
-// ): boolean => {
-//   const hook = dispatcher.useRef;
+/**
+ * Check if you can currently run hooks in a component. This avoids allocting
+ * a new hook on the stack by "peeking." Note that this doesn't correctly handle some cases
+ * For example, if you are iterating through Array.map, it won't check if you allocate more/less hooks between renders
+ *
+ * This function checks the current dispatcher, which is swapped with an invalid / valid state by React. If
+ * the current dispatcher is invalid (includes the string ("Error")), it will return false.
+ */
+export const peekIsInComponent = (
+  dispatcher: Record<string, () => void>,
+): boolean => {
+  const hook = dispatcher.useRef;
 
-//   if (typeof hook !== 'function' || invalidHookErrFunctions.has(hook)) {
-//     return false;
-//   }
-//   const str = hook.toString();
-//   if (str.includes('Error')) {
-//     invalidHookErrFunctions.set(hook, true);
-//     return false;
-//   }
-//   return true;
-// };
+  if (typeof hook !== 'function' || invalidHookErrFunctions.has(hook)) {
+    return false;
+  }
+  const str = hook.toString();
+  if (str.includes('Error')) {
+    invalidHookErrFunctions.set(hook, true);
+    return false;
+  }
+  return true;
+};
