@@ -13,7 +13,7 @@ import type {
   ChangedProp,
   OutlinePaintTask,
 } from './types';
-import { onIdle, fastSerialize } from './utils';
+import { debounce, onIdle, fastSerialize } from './utils';
 import { getCurrentOptions } from './auto';
 import { MONO_FONT, PURPLE_RGB } from './constants';
 
@@ -399,6 +399,22 @@ export const createFullscreenCanvas = () => {
       });
     }
   });
+
+  const handleViewportChange = debounce(() => {
+    if (!resizeScheduled) {
+      resizeScheduled = true;
+      requestAnimationFrame(() => {
+        resize();
+      });
+    }
+  }, 100);
+
+  window.addEventListener('resize', handleViewportChange);
+  window.addEventListener('scroll', handleViewportChange);
+  // disabled by default in Firefox
+  // https://rdavis.io/articles/dealing-with-the-visual-viewport
+  window.visualViewport?.addEventListener('resize', handleViewportChange);
+  window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
   onIdle(() => {
     const prevCanvas = document.getElementById('react-scan-canvas');
