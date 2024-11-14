@@ -383,8 +383,8 @@ export const createFullscreenCanvas = () => {
 
   const resize = () => {
     const dpi = window.devicePixelRatio;
-    canvas.width = dpi * window.innerWidth;
-    canvas.height = dpi * window.innerHeight;
+    canvas.width = dpi * (window.visualViewport?.width ?? window.innerWidth);
+    canvas.height = dpi * (window.visualViewport?.height ?? window.innerHeight);
     ctx?.scale(dpi, dpi);
     resizeScheduled = false;
   };
