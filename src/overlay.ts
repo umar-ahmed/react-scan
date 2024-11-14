@@ -386,14 +386,22 @@ export const createFullscreenCanvas = () => {
     pendingOutlines = [];
 
     const dpi = window.devicePixelRatio;
-    const width = document.documentElement.clientWidth;
-    const height = document.documentElement.clientHeight;
+    const visualViewport = window.visualViewport;
+
+    // Use visualViewport for mobile and fallback to regular viewport for desktop
+    const width = visualViewport?.width ?? window.innerWidth;
+    const height = visualViewport?.height ?? window.innerHeight;
 
     canvas.width = dpi * width;
     canvas.height = dpi * height;
 
     ctx?.setTransform(1, 0, 0, 1, 0, 0);
     ctx?.scale(dpi, dpi);
+
+    // Only apply offset on mobile devices using visualViewport
+    if (visualViewport && /Mobi|Android/i.test(navigator.userAgent)) {
+      ctx?.translate(-visualViewport.offsetLeft, -visualViewport.offsetTop);
+    }
 
     resizeScheduled = false;
   };
