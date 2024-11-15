@@ -145,6 +145,13 @@ export const registerDevtoolsHook = ({
 const REACT_MAJOR_VERSION = Number(React.version.split('.')[0]);
 const dispatcherRefs = new Set();
 
+export const getFiberDEV = (): Fiber | null => {
+  return (
+    ReactSharedInternals?.A?.getOwner() ??
+    ReactSharedInternals?.ReactCurrentOwner?.current
+  );
+};
+
 export const controlDispatcherRef = (currentDispatcherRef: any) => {
   const ref = currentDispatcherRef;
   if (ref && !dispatcherRefs.has(ref)) {
