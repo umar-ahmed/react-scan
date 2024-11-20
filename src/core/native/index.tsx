@@ -21,7 +21,11 @@ import {
   Text,
   matchFont,
 } from '@shopify/react-native-skia';
-import { useSharedValue, useDerivedValue } from 'react-native-reanimated';
+import {
+  useSharedValue,
+  useDerivedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { PendingOutline } from '../web/outline';
 
 export const genId = (): string => {
@@ -299,7 +303,14 @@ export const ReactNativeScanEntryPoint = () => {
 const ReactNativeScan = ({ id: _ }: { id: string }) => {
   const { width, height } = Dimensions.get('window');
   const outlines = useSyncExternalStore(
-    (listener) => ReactScanInternals.subscribe('activeOutlines', listener),
+    (listener) =>
+      ReactScanInternals.subscribe('activeOutlines', (value) => {
+        opacity.value = 1;
+        opacity.value = withTiming(0, {
+          duration: 300,
+        });
+        listener();
+      }),
     () => ReactScanInternals.activeOutlines,
   );
   const opacity = useSharedValue(1);
