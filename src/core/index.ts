@@ -1,11 +1,12 @@
 import type { Fiber, FiberRoot } from 'react-reconciler';
 import * as React from 'react';
 import { instrument, type Render } from './instrumentation/index';
+import { createStore } from './utils';
 import {
-  type ActiveOutline,
+  ActiveOutline,
   flushOutlines,
   getOutline,
-  type PendingOutline,
+  PendingOutline,
 } from './web/outline';
 import { createOverlay } from './web/index';
 import { logIntro } from './web/log';
@@ -110,16 +111,30 @@ interface Internals {
   >;
 }
 
-export const ReactScanInternals: Internals = {
+export type MeasurementValue = {
+  width: number;
+  height: number;
+  pageX: number;
+  pageY: number;
+};
+export type Measurement =
+  | { kind: 'dom'; value: DOMRect }
+  | {
+      kind: 'native';
+      value: MeasurementValue;
+    };
+
+export const ReactScanInternals = createStore<Internals>({
   onCommitFiberRoot: (_rendererID: number, _root: FiberRoot): void => {
     /**/
   },
-  get isProd() {
-    return (
-      '_self' in React.createElement('div') &&
-      !ReactScanInternals.options.runInProduction
-    );
-  },
+  isProd: null!, // todo
+  // get isProd() {
+  //   return (
+  //     '_self' in React.createElement('div') &&
+  //     !ReactScanInternals.options.runInProduction
+  //   );
+  // },
   isInIframe: window.self !== window.top,
   isPaused: false,
   componentAllowList: null,
@@ -136,7 +151,7 @@ export const ReactScanInternals: Internals = {
   reportData: {},
   scheduledOutlines: [],
   activeOutlines: [],
-};
+});
 
 export const getReport = () => ReactScanInternals.reportData;
 

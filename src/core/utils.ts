@@ -1,10 +1,11 @@
+import { ReactScanInternals } from '..';
 import type { Render } from './instrumentation/index';
 
 export const NO_OP = () => {
   /**/
 };
 
-export const getLabelText = (renders: Render[]) => {
+export const getLabelText = (renders: Render[], env: 'dom' | 'native') => {
   let labelText = '';
 
   const components = new Map<
@@ -43,11 +44,12 @@ export const getLabelText = (renders: Render[]) => {
     if (count > 1) {
       text += ` ×${count}`;
     }
-    if (trigger) {
+    // skia font doesn't support emojis, maybe we replace with text in native
+    if (env === 'dom' && trigger) {
       text = `🔥 ${text}`;
     }
-    if (forget) {
-      text = `${text} ✨`;
+    if (env === 'dom' && forget) {
+      text = `${text} ✨`; // no emojis for native
     }
     parts.push(text);
   }
@@ -60,3 +62,79 @@ export const getLabelText = (renders: Render[]) => {
   }
   return labelText;
 };
+type Listener<T> = (value: T) => void;
+
+interface StoreMethods<T extends object> {
+  subscribe<K extends keyof T>(key: K, listener: Listener<T[K]>): () => void;
+  set<K extends keyof T>(key: K, value: T[K]): void;
+  setState(state: Partial<T>): void;
+  emit<K extends keyof T>(key: K): void;
+}
+
+type Store<T extends object> = T & StoreMethods<T>;
+
+export const createStore = <T extends object>(initialData: T): Store<T> => {
+  const data: T = { ...initialData };
+  const listeners: { [K in keyof T]?: Array<Listener<T[K]>> } = {};
+
+  const emit = <K extends keyof T>(key: K, value: T[K]): void => {
+    listeners[key]?.forEach((listener) => listener(value));
+  };
+
+  const set = <K extends keyof T>(key: K, value: T[K]): void => {
+    if (data[key] !== value) {
+      data[key] = value;
+      emit(key, value);
+    }
+  };
+
+  const subscribe = <K extends keyof T>(
+    key: K,
+    listener: Listener<T[K]>,
+  ): (() => void) => {
+    if (!listeners[key]) {
+      listeners[key] = [];
+    }
+    listeners[key]!.push(listener);
+    listener(data[key]);
+    return () => {
+      listeners[key] = listeners[key]!.filter((l) => l !== listener);
+    };
+  };
+
+  const setState = (state: Partial<T>) => {
+    for (const key in state) {
+      if (state.hasOwnProperty(key)) {
+        set(key as keyof T, state[key] as T[keyof T]);
+      }
+    }
+  };
+
+  const proxy = new Proxy(data, {
+    get(target, prop, receiver) {
+      if (prop === 'subscribe') return subscribe;
+      if (prop === 'setState') return setState;
+      if (prop === 'emit') return emit;
+      if (prop === 'set') return set;
+
+      return Reflect.get(target, prop, receiver);
+    },
+    set(target, prop, value, receiver) {
+      if (prop in target) {
+        set(prop as keyof T, value as T[keyof T]);
+        return true;
+      } else {
+        throw new Error(`Property "${String(prop)}" does not exist`);
+      }
+    },
+    deleteProperty(_, prop) {
+      throw new Error(`Cannot delete property "${String(prop)}" from store`);
+    },
+  });
+
+  return proxy as Store<T>;
+};
+
+export const getCopiedActiveOutlines = () => [
+  ...ReactScanInternals.activeOutlines,
+];

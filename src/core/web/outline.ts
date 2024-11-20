@@ -1,27 +1,36 @@
 import { type Fiber } from 'react-reconciler';
 import { getNearestHostFiber } from '../instrumentation/fiber';
 import type { Render } from '../instrumentation/index';
-import { ReactScanInternals } from '../index';
+import { Measurement, ReactScanInternals } from '../index';
 import { getLabelText } from '../utils';
 import { isOutlineUnstable, onIdle, throttle } from './utils';
 import { log } from './log';
 import { recalcOutlineColor } from './perf-observer';
-// import { recalcOutlineColor } from './perf-observer';
+import { genId } from '../native';
+
+export const assertDom = (measurement: Measurement) => {
+  if (measurement.kind !== 'dom') {
+    throw new Error('dom invariant');
+  }
+  return measurement;
+};
 
 export interface PendingOutline {
-  rect: DOMRect;
-  domNode: HTMLElement;
+  fiber: WeakRef<Fiber>;
+  cachedMeasurement: Measurement;
   renders: Render[];
 }
 
 export interface ActiveOutline {
   outline: PendingOutline;
+  id: string;
   alpha: number;
   frame: number;
   totalFrames: number;
   resolve: () => void;
   text: string | null;
   color: { r: number; g: number; b: number };
+  updatedAt: number;
 }
 
 export interface PaintedOutline {
@@ -30,13 +39,30 @@ export interface PaintedOutline {
   text: string | null;
 }
 
+export function devInvariant<T>(
+  value: T | null | undefined,
+  message: string,
+  prodMessage?: string,
+): asserts value is T {
+  if (value) {
+    return;
+  }
+  if (!ReactScanInternals.isProd) {
+    throw new Error(message);
+  }
+
+  if (prodMessage) {
+    console.error(message);
+  }
+}
+
 export const MONO_FONT =
   'Menlo,Consolas,Monaco,Liberation Mono,Lucida Console,monospace';
 const DEFAULT_THROTTLE_TIME = 16; // 1 frame
 export const colorRef = { current: '115,97,230' };
 
-export const getOutlineKey = (outline: PendingOutline): string => {
-  return `${outline.rect.top}-${outline.rect.left}-${outline.rect.width}-${outline.rect.height}`;
+export const getOutlineKey = (rect: DOMRect): string => {
+  return `${rect.top}-${rect.left}-${rect.width}-${rect.height}`;
 };
 
 const rectCache = new Map<HTMLElement, { rect: DOMRect; timestamp: number }>();
@@ -101,9 +127,12 @@ export const getOutline = (
   if (!rect) return null;
 
   return {
-    rect,
-    domNode,
+    fiber: new WeakRef(fiber),
     renders: [render],
+    cachedMeasurement: {
+      kind: 'dom',
+      value: rect,
+    },
   };
 };
 
@@ -111,7 +140,7 @@ export const mergeOutlines = (outlines: PendingOutline[]) => {
   const mergedOutlines = new Map<string, PendingOutline>();
   for (let i = 0, len = outlines.length; i < len; i++) {
     const outline = outlines[i];
-    const key = getOutlineKey(outline);
+    const key = getOutlineKey(assertDom(outline.cachedMeasurement).value);
     const existingOutline = mergedOutlines.get(key);
 
     if (!existingOutline) {
@@ -123,29 +152,42 @@ export const mergeOutlines = (outlines: PendingOutline[]) => {
   return Array.from(mergedOutlines.values());
 };
 
+export const getDomNode = (outline: PendingOutline) => {
+  const fiber = outline.fiber.deref();
+  if (!fiber) {
+    return;
+  }
+  const domNode = fiber.stateNode;
+  if (!(domNode instanceof HTMLElement)) return null;
+  return domNode;
+};
 export const recalcOutlines = throttle(() => {
   const { scheduledOutlines, activeOutlines } = ReactScanInternals;
 
   for (let i = scheduledOutlines.length - 1; i >= 0; i--) {
     const outline = scheduledOutlines[i];
-    const rect = getRect(outline.domNode);
+    const domNode = getDomNode(outline);
+    if (!domNode) continue;
+    const rect = getRect(domNode);
     if (!rect) {
       scheduledOutlines.splice(i, 1);
       continue;
     }
-    outline.rect = rect;
+    outline.cachedMeasurement.value = rect;
   }
 
   for (let i = activeOutlines.length - 1; i >= 0; i--) {
     const activeOutline = activeOutlines[i];
     if (!activeOutline) continue;
     const { outline } = activeOutline;
-    const rect = getRect(outline.domNode);
+    const domNode = getDomNode(outline);
+    if (!domNode) continue;
+    const rect = getRect(domNode);
     if (!rect) {
       activeOutlines.splice(i, 1);
       continue;
     }
-    outline.rect = rect;
+    outline.cachedMeasurement.value = rect;
   }
 }, DEFAULT_THROTTLE_TIME);
 
@@ -196,7 +238,7 @@ export const flushOutlines = (
 
       await Promise.all(
         mergedOutlines.map(async (outline) => {
-          const key = getOutlineKey(outline);
+          const key = getOutlineKey(assertDom(outline.cachedMeasurement).value);
           if (previousOutlines.has(key)) {
             return;
           }
@@ -228,9 +270,12 @@ export const paintOutline = (
       log(outline.renders);
     }
 
-    const key = getOutlineKey(outline);
+    const key = getOutlineKey(assertDom(outline.cachedMeasurement).value); // todo: fix for dom
     const existingActiveOutline = ReactScanInternals.activeOutlines.find(
-      (activeOutline) => getOutlineKey(activeOutline.outline) === key,
+      (activeOutline) =>
+        getOutlineKey(
+          assertDom(activeOutline.outline.cachedMeasurement).value,
+        ) === key,
     );
 
     const renderCount = outline.renders.length;
@@ -248,12 +293,14 @@ export const paintOutline = (
 
     if (existingActiveOutline) {
       existingActiveOutline.outline.renders.push(...outline.renders);
-      existingActiveOutline.outline.rect = outline.rect;
+      existingActiveOutline.outline.cachedMeasurement =
+        outline.cachedMeasurement;
       existingActiveOutline.frame = 0;
       existingActiveOutline.totalFrames = totalFrames;
       existingActiveOutline.alpha = alpha;
       existingActiveOutline.text = getLabelText(
         existingActiveOutline.outline.renders,
+        'dom',
       );
       existingActiveOutline.color = color;
     } else {
@@ -267,8 +314,10 @@ export const paintOutline = (
           resolve();
           options.onPaintFinish?.(outline);
         },
-        text: getLabelText(outline.renders),
+        text: getLabelText(outline.renders, 'dom'),
         color,
+        updatedAt: Date.now(),
+        id: genId(),
       });
     }
 
@@ -295,13 +344,16 @@ export const fadeOutOutline = (ctx: CanvasRenderingContext2D) => {
     if (!activeOutline) continue;
     const { outline, frame, totalFrames } = activeOutline;
     requestAnimationFrame(() => {
-      if (!outline) return;
-      const newRect = getRect(outline.domNode);
+      const domNode = getDomNode(outline);
+      if (!domNode) {
+        return;
+      }
+      const newRect = getRect(domNode);
       if (newRect) {
-        outline.rect = newRect;
+        outline.cachedMeasurement.value = newRect;
       }
     });
-    const { rect } = outline;
+    const { value: rect } = assertDom(outline.cachedMeasurement);
     const unstable = isOutlineUnstable(outline);
 
     const alphaScalar = unstable ? 0.8 : 0.2;
@@ -341,7 +393,7 @@ export const fadeOutOutline = (ctx: CanvasRenderingContext2D) => {
 
   for (let i = 0, len = pendingLabeledOutlines.length; i < len; i++) {
     const { alpha, outline, text } = pendingLabeledOutlines[i];
-    const { rect } = outline;
+    const { value: rect } = assertDom(outline.cachedMeasurement); // todo: fix for dom
     ctx.save();
 
     if (text) {
