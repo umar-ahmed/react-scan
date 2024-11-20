@@ -1,4 +1,4 @@
-import { ReactScanInternals } from '..';
+import { ReactScanInternals } from '../';
 import type { Render } from './instrumentation/index';
 
 export const NO_OP = () => {
@@ -64,7 +64,7 @@ export const getLabelText = (renders: Render[], env: 'dom' | 'native') => {
 };
 type Listener<T> = (value: T) => void;
 
-interface StoreMethods<T extends object> {
+export interface StoreMethods<T extends object> {
   subscribe<K extends keyof T>(key: K, listener: Listener<T[K]>): () => void;
   set<K extends keyof T>(key: K, value: T[K]): void;
   setState(state: Partial<T>): void;

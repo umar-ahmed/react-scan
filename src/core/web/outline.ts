@@ -16,7 +16,7 @@ export const assertDom = (measurement: Measurement) => {
 };
 
 export interface PendingOutline {
-  fiber: WeakRef<Fiber>;
+  fiber: Fiber; // todo, weak ref not always available
   cachedMeasurement: Measurement;
   renders: Render[];
 }
@@ -127,7 +127,7 @@ export const getOutline = (
   if (!rect) return null;
 
   return {
-    fiber: new WeakRef(fiber),
+    fiber: fiber,
     renders: [render],
     cachedMeasurement: {
       kind: 'dom',
@@ -153,10 +153,10 @@ export const mergeOutlines = (outlines: PendingOutline[]) => {
 };
 
 export const getDomNode = (outline: PendingOutline) => {
-  const fiber = outline.fiber.deref();
-  if (!fiber) {
-    return;
-  }
+  const fiber = outline.fiber;
+  // if (!fiber) {
+  //   return;
+  // }
   const domNode = fiber.stateNode;
   if (!(domNode instanceof HTMLElement)) return null;
   return domNode;

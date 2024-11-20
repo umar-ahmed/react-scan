@@ -1,41 +1,33 @@
 import {
+  Animated,
   PanResponder,
+  Pressable,
+  Text as RNText,
   UIManager,
   View,
-  Text as RNText,
-  Pressable,
-  Animated,
 } from 'react-native';
 import { Fiber } from 'react-reconciler';
+import { Measurement, MeasurementValue, ReactScanInternals } from '../..';
 import { instrument, Render } from '../instrumentation';
 import { getNearestHostFiber } from '../instrumentation/fiber';
-import { Measurement, MeasurementValue, ReactScanInternals } from '../..';
 import { getCopiedActiveOutlines, getLabelText } from '../utils';
 
-import React, { useEffect, useRef, useSyncExternalStore } from 'react';
-import { Dimensions, Platform } from 'react-native';
 import {
   Canvas,
   Group,
+  matchFont,
   Rect,
   Text,
-  matchFont,
 } from '@shopify/react-native-skia';
-import {
-  useSharedValue,
-  useDerivedValue,
-  withTiming,
-} from 'react-native-reanimated';
-import { PendingOutline } from '../web/outline';
+import React, { useEffect, useRef, useState } from 'react';
+import { Dimensions, Platform } from 'react-native';
+import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import { ActiveOutline, PendingOutline } from '../web/outline';
 
-export const genId = (): string => {
-  const timeStamp = Date.now().toString(36);
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
-  const randomPart = Array.from(array)
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-  return `${timeStamp}-${randomPart}`;
+export const genId = () => {
+  const timeStamp: number = performance.now();
+  const randomNum: number = Math.floor(Math.random() * 1000);
+  return `${timeStamp}-${randomNum}`;
 };
 
 export const measureFiber = (
@@ -44,6 +36,8 @@ export const measureFiber = (
 ): Promise<MeasurementValue | null> => {
   return new Promise((resolve) => {
     const handleMeasurement = (
+      x: number,
+      y: number,
       width: number,
       height: number,
       pageX: number,
@@ -64,27 +58,27 @@ export const measureFiber = (
         return;
       }
 
-      // // this probably doesn't do anything
-      // if (measurableNode.stateNode?._nativeTag) {
-      //   // console.log("B");
-      //   UIManager.measure(
-      //     measurableNode.stateNode._nativeTag,
-      //     handleMeasurement
-      //   );
-      //   return;
-      // }
+      // this probably doesn't do anything
+      if (measurableNode.stateNode?._nativeTag) {
+        // console.log("B");
+        UIManager.measure(
+          measurableNode.stateNode._nativeTag,
+          handleMeasurement,
+        );
+        return;
+      }
 
-      // // this probably doesn't do anything
-      // if (measurableNode.stateNode?.measureInWindow) {
-      //   // console.log("C");
-      //   measurableNode.stateNode.measureInWindow(
-      //     (x: number, y: number, width: number, height: number) => {
-      //       // measureInWindow doesn't provide pageX/pageY, so they're same as x/y
-      //       handleMeasurement(x, y, width, height, x, y);
-      //     }
-      //   );
-      //   return;
-      // }
+      // this probably doesn't do anything
+      if (measurableNode.stateNode?.measureInWindow) {
+        // console.log("C");
+        measurableNode.stateNode.measureInWindow(
+          (x: number, y: number, width: number, height: number) => {
+            // measureInWindow doesn't provide pageX/pageY, so they're same as x/y
+            handleMeasurement(x, y, width, height, x, y);
+          },
+        );
+        return;
+      }
 
       // If no measurement method found, try the first child
       measurableNode = measurableNode.child;
@@ -109,67 +103,78 @@ export const assertNative = (measurement: Measurement) => {
 const updateOutlines = async (fiber: Fiber, render: Render) => {
   const hostFiber = getNearestHostFiber(fiber);
   if (!hostFiber) {
+    // console.log('nope');
     return null;
   }
   const measurement = await measureFiber(fiber);
   if (!measurement) {
+    // console.log('nope1');
     return null;
   }
 
   if (!measurement.pageX) {
+    // console.log('nope 2');
     // weird case come back to this
     return null;
   }
 
-  const existingOutline = ReactScanInternals.activeOutlines.find(
-    ({ outline }) => {
-      return (
-        getKey(assertNative(outline.cachedMeasurement).value) ===
-        getKey(measurement)
-      );
-    },
-  );
-
-  // if an outline exists we just update the renders
-  if (existingOutline) {
-    existingOutline.outline.renders.push(render);
-    existingOutline.text = getLabelText(
-      existingOutline.outline.renders,
-      'native',
+  // console.log('nice', measurement);
+  try {
+    const existingOutline = ReactScanInternals.activeOutlines.find(
+      ({ outline }) => {
+        return (
+          getKey(assertNative(outline.cachedMeasurement).value) ===
+          getKey(measurement)
+        );
+      },
     );
-    existingOutline.updatedAt = Date.now();
-    ReactScanInternals.activeOutlines = getCopiedActiveOutlines();
-  } else {
-    // create the outline for the first time
-    const measuredFiber = await measureFiber(fiber);
-    if (!measuredFiber) {
-      return;
+    // console.log('hi', existingOutline);
+
+    // if an outline exists we just update the renders
+    if (existingOutline) {
+      existingOutline.outline.renders.push(render);
+      existingOutline.text = getLabelText(
+        existingOutline.outline.renders,
+        'native',
+      );
+      existingOutline.updatedAt = Date.now();
+      ReactScanInternals.activeOutlines = getCopiedActiveOutlines();
+      // console.log('boo');
+    } else {
+      // create the outline for the first time
+      const measuredFiber = await measureFiber(fiber);
+      if (!measuredFiber) {
+        return;
+      }
+      const newOutline: PendingOutline = {
+        cachedMeasurement: {
+          kind: 'native',
+          value: measuredFiber,
+        },
+        fiber,
+        renders: [render],
+      };
+      ReactScanInternals.activeOutlines.push({
+        outline: newOutline,
+        alpha: null!,
+        frame: null!,
+        totalFrames: null!,
+        id: genId(),
+        resolve: () => {
+          // resolve();
+          // todo, update this,
+          // options.onPaintFinish?.(outline);
+        },
+        text: getLabelText(newOutline.renders, 'native'),
+        updatedAt: Date.now(),
+        color: null!, // not used for now
+      });
+      // tell useSes there's new data
+      // console.log('pushing outline', ReactScanInternals.activeOutlines.length);
+      ReactScanInternals.activeOutlines = getCopiedActiveOutlines();
     }
-    const newOutline: PendingOutline = {
-      cachedMeasurement: {
-        kind: 'native',
-        value: measuredFiber,
-      },
-      fiber: new WeakRef(fiber),
-      renders: [render],
-    };
-    ReactScanInternals.activeOutlines.push({
-      outline: newOutline,
-      alpha: null!,
-      frame: null!,
-      totalFrames: null!,
-      id: genId(),
-      resolve: () => {
-        // resolve();
-        // todo, update this,
-        // options.onPaintFinish?.(outline);
-      },
-      text: getLabelText(newOutline.renders, 'native'),
-      updatedAt: Date.now(),
-      color: null!, // not used for now
-    });
-    // tell useSes there's new data
-    ReactScanInternals.activeOutlines = getCopiedActiveOutlines();
+  } catch (e) {
+    console.log(e);
   }
 };
 
@@ -182,6 +187,7 @@ export const instrumentNative = () => {
     async onRender(fiber, render) {
       // console.log('render', render.name);
       // port over metadata stuff later
+      // console.log('render', render.name);
       options.onRender?.(fiber, render);
       updateOutlines(fiber, render);
     },
@@ -194,35 +200,9 @@ export const instrumentNative = () => {
 // dont run this here
 instrumentNative();
 
-const useCleanupActiveLines = () => {
-  const isPaused = useSyncExternalStore(
-    (listener) => ReactScanInternals.subscribe('isPaused', listener),
-    () => ReactScanInternals.isPaused,
-  );
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (isPaused) return;
-
-      const newActive = ReactScanInternals.activeOutlines.filter(
-        (x) => Date.now() - x.updatedAt < 300,
-      );
-      if (newActive.length !== ReactScanInternals.activeOutlines.length) {
-        ReactScanInternals.set('activeOutlines', newActive);
-      }
-    }, 200);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [isPaused]);
-};
-
 export const ReactNativeScanEntryPoint = () => {
-  useCleanupActiveLines();
-  const isPaused = useSyncExternalStore(
-    (listener) => ReactScanInternals.subscribe('isPaused', listener),
-    () => ReactScanInternals.isPaused,
-  );
-
+  console.log('running');
+  const [isEnabled, setIsEnabled] = useState(true);
   const pan = useRef(new Animated.ValueXY()).current;
 
   const panResponder = useRef(
@@ -245,11 +225,28 @@ export const ReactNativeScanEntryPoint = () => {
     }),
   ).current;
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isEnabled) return;
+
+      const newActive = ReactScanInternals.activeOutlines.filter(
+        (x) => Date.now() - x.updatedAt < 300,
+      );
+      if (newActive.length !== ReactScanInternals.activeOutlines.length) {
+        ReactScanInternals.set('activeOutlines', newActive);
+      }
+    }, 200);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isEnabled]);
+
   return (
     <>
-      {!isPaused && <ReactNativeScan id="react-scan-no-traverse" />}
+      {isEnabled && <ReactNativeScan id="react-scan-no-traverse" />}
 
       <Animated.View
+        id="react-scan-no-traverse"
         style={{
           position: 'absolute',
           bottom: 20,
@@ -260,9 +257,9 @@ export const ReactNativeScanEntryPoint = () => {
         {...panResponder.panHandlers}
       >
         <Pressable
-          onPress={() => (ReactScanInternals.isPaused = !isPaused)}
+          onPress={() => setIsEnabled(!isEnabled)}
           style={{
-            backgroundColor: !isPaused
+            backgroundColor: isEnabled
               ? 'rgba(88, 82, 185, 0.9)'
               : 'rgba(88, 82, 185, 0.5)',
             paddingHorizontal: 12,
@@ -278,7 +275,7 @@ export const ReactNativeScanEntryPoint = () => {
               width: 8,
               height: 8,
               borderRadius: 4,
-              backgroundColor: !isPaused ? '#4ADE80' : '#666',
+              backgroundColor: isEnabled ? '#4ADE80' : '#666',
             }}
           />
           <RNText
@@ -302,17 +299,25 @@ export const ReactNativeScanEntryPoint = () => {
 
 const ReactNativeScan = ({ id: _ }: { id: string }) => {
   const { width, height } = Dimensions.get('window');
-  const outlines = useSyncExternalStore(
-    (listener) =>
-      ReactScanInternals.subscribe('activeOutlines', (value) => {
-        opacity.value = 1;
-        opacity.value = withTiming(0, {
-          duration: 300,
-        });
-        listener();
-      }),
-    () => ReactScanInternals.activeOutlines,
-  );
+  // const [outlines, setOutlines] = React.useState<ActiveOutline[]>([]);
+  // const outlines = useSyncExternalStore(
+  //   (listener) => ReactScanInternals.subscribe('activeOutlines', (value) => {
+  //     opacity.value = 1;
+  //     opacity.value = withTiming(0, {
+  //       duration: 300
+  //     })
+  //     listener()
+  //   }),
+  //   () => ReactScanInternals.activeOutlines,
+  // );
+
+  const [outlines, setOutlines] = useState<Array<ActiveOutline>>([]);
+
+  useEffect(() => {
+    setInterval(() => {
+      setOutlines(ReactScanInternals.activeOutlines);
+    }, 50);
+  }, []);
   const opacity = useSharedValue(1);
   const animatedOpacity = useDerivedValue(() => opacity.value);
   const font = matchFont({
@@ -321,10 +326,12 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
     fontWeight: 'bold',
   });
 
+  // console.log('outlines', outlines.length);
+
   const getTextWidth = (text: string) => {
     return (text || 'unknown').length * 7;
   };
-
+  console.log('render');
   return (
     <Canvas
       style={{
@@ -343,6 +350,7 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
           const labelPadding = 4;
           const labelWidth = textWidth + labelPadding * 2;
           const labelHeight = 12;
+          // console.log('bruh',render.id);
           return (
             <Group key={render.id}>
               <Rect
