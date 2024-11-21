@@ -148,6 +148,11 @@ const dimensions = Dimensions.get('window');
 const isVisible = (x: number, y: number) => {
   return x >= 0 && x <= dimensions.width && y >= 0 && y <= dimensions.height;
 };
+const font = matchFont({
+  fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }),
+  fontSize: 11,
+  fontWeight: 'bold',
+});
 const getTextWidth = (text: string) => {
   return (text || 'unknown').length * 7;
 };
@@ -168,12 +173,6 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
   );
   // );
   const animatedOpacity = useDerivedValue(() => opacity.value);
-
-  const font = matchFont({
-    fontFamily: Platform.select({ ios: 'Courier', default: 'monospace' }),
-    fontSize: 11,
-    fontWeight: 'bold',
-  });
 
   return (
     <Canvas
