@@ -1,6 +1,12 @@
 import type { Fiber, FiberRoot } from 'react-reconciler';
 import * as React from 'react';
 import { instrument, type Render } from './instrumentation/index';
+
+import { createOverlay } from './web/index';
+import { logIntro } from './web/log';
+import { createToolbar } from './web/toolbar';
+import { playGeigerClickSound } from './web/geiger';
+import { createPerfObserver } from './web/perf-observer';
 import { createStore } from './utils';
 import {
   ActiveOutline,
@@ -8,11 +14,6 @@ import {
   getOutline,
   PendingOutline,
 } from './web/outline';
-import { createOverlay } from './web/index';
-import { logIntro } from './web/log';
-import { createToolbar } from './web/toolbar';
-import { playGeigerClickSound } from './web/geiger';
-import { createPerfObserver } from './web/perf-observer';
 
 interface Options {
   /**
@@ -88,8 +89,8 @@ interface Options {
   onCommitStart?: () => void;
   onRender?: (fiber: Fiber, render: Render) => void;
   onCommitFinish?: () => void;
-  onPaintStart?: (outline: PendingOutline) => void;
-  onPaintFinish?: (outline: PendingOutline) => void;
+  onPaintStart?: (outline: any) => void;
+  onPaintFinish?: (outline: any) => void;
 }
 
 interface Internals {
@@ -116,6 +117,8 @@ export type MeasurementValue = {
   height: number;
   pageX: number;
   pageY: number;
+  x: number;
+  y: number;
 };
 export type Measurement =
   | { kind: 'dom'; value: DOMRect }
