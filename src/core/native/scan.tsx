@@ -188,9 +188,8 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
     >
       <Group opacity={animatedOpacity}>
         {outlines
-          // we can maybe take this out of render if Dimensions.get is cheap
           .filter(({ outline }) => {
-            const measurement = assertNative(outline.cachedMeasurement).value;
+            const measurement = assertNative(outline.latestMeasurement).value;
             const vis = isVisible(measurement.x, measurement.y);
             return vis;
           })
@@ -202,33 +201,33 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
             return (
               <Group key={render.id}>
                 <Rect
-                  x={assertNative(render.outline.cachedMeasurement).value.pageX}
-                  y={assertNative(render.outline.cachedMeasurement).value.pageY}
+                  x={assertNative(render.outline.latestMeasurement).value.pageX}
+                  y={assertNative(render.outline.latestMeasurement).value.pageY}
                   width={
-                    assertNative(render.outline.cachedMeasurement).value.width
+                    assertNative(render.outline.latestMeasurement).value.width
                   }
                   height={
-                    assertNative(render.outline.cachedMeasurement).value.height
+                    assertNative(render.outline.latestMeasurement).value.height
                   }
                   color="rgba(88, 82, 185, 0.1)"
                 />
                 <Rect
-                  x={assertNative(render.outline.cachedMeasurement).value.pageX}
-                  y={assertNative(render.outline.cachedMeasurement).value.pageY}
+                  x={assertNative(render.outline.latestMeasurement).value.pageX}
+                  y={assertNative(render.outline.latestMeasurement).value.pageY}
                   width={
-                    assertNative(render.outline.cachedMeasurement).value.width
+                    assertNative(render.outline.latestMeasurement).value.width
                   }
                   height={
-                    assertNative(render.outline.cachedMeasurement).value.height
+                    assertNative(render.outline.latestMeasurement).value.height
                   }
                   color="rgba(147, 141, 255, 0.6)"
                   style="stroke"
                   strokeWidth={1}
                 />
                 <Rect
-                  x={assertNative(render.outline.cachedMeasurement).value.pageX}
+                  x={assertNative(render.outline.latestMeasurement).value.pageX}
                   y={
-                    assertNative(render.outline.cachedMeasurement).value.pageY -
+                    assertNative(render.outline.latestMeasurement).value.pageY -
                     labelHeight -
                     2
                   }
@@ -238,11 +237,11 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
                 />
                 <Text
                   x={
-                    assertNative(render.outline.cachedMeasurement).value.pageX +
+                    assertNative(render.outline.latestMeasurement).value.pageX +
                     labelPadding
                   }
                   y={
-                    assertNative(render.outline.cachedMeasurement).value.pageY -
+                    assertNative(render.outline.latestMeasurement).value.pageY -
                     5
                   }
                   text={render.text || 'unknown'}

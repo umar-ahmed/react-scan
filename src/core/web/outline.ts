@@ -17,7 +17,7 @@ export const assertDom = (measurement: Measurement) => {
 
 export interface PendingOutline {
   fiber: Fiber; // todo, weak ref not always available
-  cachedMeasurement: Measurement;
+  latestMeasurement: Measurement;
   renders: Render[];
 }
 
@@ -129,7 +129,7 @@ export const getOutline = (
   return {
     fiber: fiber,
     renders: [render],
-    cachedMeasurement: {
+    latestMeasurement: {
       kind: 'dom',
       value: rect,
     },
@@ -140,7 +140,7 @@ export const mergeOutlines = (outlines: PendingOutline[]) => {
   const mergedOutlines = new Map<string, PendingOutline>();
   for (let i = 0, len = outlines.length; i < len; i++) {
     const outline = outlines[i];
-    const key = getOutlineKey(assertDom(outline.cachedMeasurement).value);
+    const key = getOutlineKey(assertDom(outline.latestMeasurement).value);
     const existingOutline = mergedOutlines.get(key);
 
     if (!existingOutline) {
@@ -173,7 +173,7 @@ export const recalcOutlines = throttle(() => {
       scheduledOutlines.splice(i, 1);
       continue;
     }
-    outline.cachedMeasurement.value = rect;
+    outline.latestMeasurement.value = rect;
   }
 
   for (let i = activeOutlines.length - 1; i >= 0; i--) {
@@ -187,7 +187,7 @@ export const recalcOutlines = throttle(() => {
       activeOutlines.splice(i, 1);
       continue;
     }
-    outline.cachedMeasurement.value = rect;
+    outline.latestMeasurement.value = rect;
   }
 }, DEFAULT_THROTTLE_TIME);
 
@@ -238,7 +238,7 @@ export const flushOutlines = (
 
       await Promise.all(
         mergedOutlines.map(async (outline) => {
-          const key = getOutlineKey(assertDom(outline.cachedMeasurement).value);
+          const key = getOutlineKey(assertDom(outline.latestMeasurement).value);
           if (previousOutlines.has(key)) {
             return;
           }
@@ -270,11 +270,11 @@ export const paintOutline = (
       log(outline.renders);
     }
 
-    const key = getOutlineKey(assertDom(outline.cachedMeasurement).value); // todo: fix for dom
+    const key = getOutlineKey(assertDom(outline.latestMeasurement).value); // todo: fix for dom
     const existingActiveOutline = ReactScanInternals.activeOutlines.find(
       (activeOutline) =>
         getOutlineKey(
-          assertDom(activeOutline.outline.cachedMeasurement).value,
+          assertDom(activeOutline.outline.latestMeasurement).value,
         ) === key,
     );
 
@@ -293,8 +293,8 @@ export const paintOutline = (
 
     if (existingActiveOutline) {
       existingActiveOutline.outline.renders.push(...outline.renders);
-      existingActiveOutline.outline.cachedMeasurement =
-        outline.cachedMeasurement;
+      existingActiveOutline.outline.latestMeasurement =
+        outline.latestMeasurement;
       existingActiveOutline.frame = 0;
       existingActiveOutline.totalFrames = totalFrames;
       existingActiveOutline.alpha = alpha;
@@ -350,10 +350,10 @@ export const fadeOutOutline = (ctx: CanvasRenderingContext2D) => {
       }
       const newRect = getRect(domNode);
       if (newRect) {
-        outline.cachedMeasurement.value = newRect;
+        outline.latestMeasurement.value = newRect;
       }
     });
-    const { value: rect } = assertDom(outline.cachedMeasurement);
+    const { value: rect } = assertDom(outline.latestMeasurement);
     const unstable = isOutlineUnstable(outline);
 
     const alphaScalar = unstable ? 0.8 : 0.2;
@@ -393,7 +393,7 @@ export const fadeOutOutline = (ctx: CanvasRenderingContext2D) => {
 
   for (let i = 0, len = pendingLabeledOutlines.length; i < len; i++) {
     const { alpha, outline, text } = pendingLabeledOutlines[i];
-    const { value: rect } = assertDom(outline.cachedMeasurement); // todo: fix for dom
+    const { value: rect } = assertDom(outline.latestMeasurement); // todo: fix for dom
     ctx.save();
 
     if (text) {

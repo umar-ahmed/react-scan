@@ -118,17 +118,15 @@ const updateOutlines = async (fiber: Fiber, render: Render) => {
     return null;
   }
 
-  // console.log('nice', measurement);
   try {
     const existingOutline = ReactScanInternals.activeOutlines.find(
       ({ outline }) => {
         return (
-          getKey(assertNative(outline.cachedMeasurement).value) ===
+          getKey(assertNative(outline.latestMeasurement).value) ===
           getKey(measurement)
         );
       },
     );
-    // console.log('hi', existingOutline);
 
     // if an outline exists we just update the renders
     if (existingOutline) {
@@ -141,7 +139,7 @@ const updateOutlines = async (fiber: Fiber, render: Render) => {
       ReactScanInternals.activeOutlines = getCopiedActiveOutlines();
     } else {
       const newOutline: PendingOutline = {
-        cachedMeasurement: {
+        latestMeasurement: {
           kind: 'native',
           value: measurement,
         },
@@ -156,7 +154,7 @@ const updateOutlines = async (fiber: Fiber, render: Render) => {
         id: genId(),
         resolve: () => {
           // resolve();
-          // todo, update this,
+          // todo, update this/inject options into update outlines,
           // options.onPaintFinish?.(outline);
         },
         text: getLabelText(newOutline.renders, 'native'),
