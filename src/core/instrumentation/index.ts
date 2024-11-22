@@ -14,23 +14,23 @@ import {
   traverseState,
 } from './fiber';
 
-declare global {
-  interface Window {
-    __REACT_SCAN__?: {
-      ReactScanInternals: typeof ReactScanInternals;
-    };
-    reactScan: any;
-    __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
-      checkDCE: typeof NO_OP;
-      supportsFiber: boolean;
-      renderers: Map<number, any>;
-      onScheduleFiberRoot: typeof NO_OP;
-      onCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
-      onCommitFiberUnmount: typeof NO_OP;
-      inject: (renderer: any) => number;
-    };
-  }
-}
+// declare global {
+//   interface Window {
+//     __REACT_SCAN__?: {
+//       ReactScanInternals: typeof ReactScanInternals;
+//     };
+//     reactScan: any;
+//     __REACT_DEVTOOLS_GLOBAL_HOOK__?: {
+//       checkDCE: typeof NO_OP;
+//       supportsFiber: boolean;
+//       renderers: Map<number, any>;
+//       onScheduleFiberRoot: typeof NO_OP;
+//       onCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
+//       onCommitFiberUnmount: typeof NO_OP;
+//       inject: (renderer: any) => number;
+//     };
+//   }
+// }
 
 export interface Change {
   name: string;
@@ -153,8 +153,31 @@ export const reportRender = (
   fiber: Fiber,
   renders: (Render | null)[],
 ) => {
+  // TODO ROB: TURN ON REPORTING ASAP!!
   if (ReactScanInternals.options.report === false) return;
-  const report = ReactScanInternals.reportData[name];
+
+  const [reportFiber, report] = (() => {
+    const currentFiberData = ReactScanInternals.reportData.get(fiber);
+    if (currentFiberData) {
+      return [fiber, currentFiberData] as const;
+    }
+    if (!fiber.alternate) {
+      return [fiber, null] as const; // use the current fiber as a key
+    }
+
+    const alternateFiberData = ReactScanInternals.reportData.get(
+      fiber.alternate,
+    );
+    return [fiber.alternate, alternateFiberData] as const;
+  })();
+
+  // const [reportFiber, report] =
+  //   ([fiber, ReactScanInternals.reportData.get(fiber)] as const) ??
+  //   (fiber.alternate &&
+  //     ([
+  //       ReactScanInternals.reportData.get(fiber.alternate),
+  //       fiber.alternate,
+  //     ] as const));
   if (report) {
     for (let i = 0, len = renders.length; i < len; i++) {
       const render = renders[i];
@@ -165,11 +188,20 @@ export const reportRender = (
   }
   const time = getSelfTime(fiber) ?? 0;
 
-  ReactScanInternals.reportData[name] = {
+  // ReactScanInternals.reportData[name] = {
+  // count: (report?.count ?? 0) + 1,
+  // time: (report?.time ?? 0) + time,
+  // badRenders: report?.badRenders || [],
+  // };
+  ReactScanInternals.reportData.set(reportFiber, {
     count: (report?.count ?? 0) + 1,
     time: (report?.time ?? 0) + time,
     badRenders: report?.badRenders || [],
-  };
+    // @ts-expect-error
+    displayName: getDisplayName(fiber.type),
+  });
+  ReactScanInternals.emit('reportData', ReactScanInternals.reportData);
+  console.log('SETTING', ReactScanInternals.reportData);
 };
 
 export const instrument = ({
@@ -210,6 +242,7 @@ export const instrument = ({
 
       const name = getDisplayName(type);
       if (name) {
+        console.log('reporting render', fiber);
         reportRender(name, fiber, [propsRender, contextRender]);
       }
 

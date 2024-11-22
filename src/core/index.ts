@@ -12,6 +12,12 @@ import { logIntro } from './web/log';
 import { createToolbar } from './web/toolbar';
 import { playGeigerClickSound } from './web/geiger';
 import { createPerfObserver } from './web/perf-observer';
+import {
+  initPropsOverlay,
+  listenForClick,
+  listenForMouseMove,
+} from './web/props';
+import { createStore } from './utils';
 
 interface Options {
   /**
@@ -101,6 +107,12 @@ interface Options {
   onPaintFinish?: (outlines: PendingOutline[]) => void;
 }
 
+interface ActiveProp {
+  rect: DOMRect;
+  displayName: string;
+  props: Record<string, unknown>;
+}
+
 interface Internals {
   onCommitFiberRoot: (rendererID: number, root: FiberRoot) => void;
   isInIframe: boolean;
@@ -109,17 +121,20 @@ interface Internals {
   options: Options;
   scheduledOutlines: PendingOutline[];
   activeOutlines: ActiveOutline[];
-  reportData: Record<
-    string,
+  reportData: WeakMap<
+    Fiber,
     {
       count: number;
       time: number;
       badRenders: Render[];
     }
   >;
+  activePropOverlays: Array<ActiveProp>;
+  hoveredDomElement: HTMLElement | null;
+  focusedDomElement: HTMLElement | null;
 }
 
-export const ReactScanInternals: Internals = {
+export const ReactScanInternals = createStore<Internals>({
   onCommitFiberRoot: (_rendererID: number, _root: FiberRoot): void => {
     /**/
   },
@@ -137,10 +152,13 @@ export const ReactScanInternals: Internals = {
     report: false,
     alwaysShowLabels: false,
   },
-  reportData: {},
+  reportData: new WeakMap(),
   scheduledOutlines: [],
   activeOutlines: [],
-};
+  activePropOverlays: [],
+  hoveredDomElement: null,
+  focusedDomElement: null,
+});
 
 export const getReport = () => ReactScanInternals.reportData;
 
@@ -157,9 +175,12 @@ let inited = false;
 
 export const start = () => {
   if (inited) return;
+  listenForClick(); // todo, remove event listener if exists
+  listenForMouseMove(); // todo remove event listener if exists
   inited = true;
   const { options } = ReactScanInternals;
-  const ctx = createOverlay();
+  const [ctx, canvas] = createOverlay();
+  initPropsOverlay(canvas);
   const toolbar = options.showToolbar ? createToolbar() : null;
   const audioContext =
     typeof window !== 'undefined'
@@ -194,6 +215,7 @@ export const start = () => {
         );
         playGeigerClickSound(audioContext, amplitude);
       }
+      console.log('flush');
       flushOutlines(ctx, new Map(), toolbar);
     },
     onCommitFinish() {

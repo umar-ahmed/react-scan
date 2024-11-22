@@ -1,6 +1,6 @@
 {
   "name": "react-scan",
-  "version": "0.0.15",
+  "version": "0.0.131",
   "description": "Scan your React app for renders",
   "keywords": [
     "react",
@@ -110,7 +110,8 @@
     "dev": "NODE_ENV=development tsup --watch",
     "lint": "eslint 'src/**/*.{ts,tsx}' --fix",
     "prettier": "prettier --config .prettierrc.mjs -w src",
-    "publint": "publint"
+    "publint": "publint",
+    "reload": "bun run /Users/robby/react-scan/pack.ts"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

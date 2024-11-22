@@ -47,9 +47,9 @@ export const getRect = (domNode: HTMLElement): DOMRect | null => {
   const now = performance.now();
   const cached = rectCache.get(domNode);
 
-  if (cached && now - cached.timestamp < DEFAULT_THROTTLE_TIME) {
-    return cached.rect;
-  }
+  // if (cached && now - cached.timestamp < DEFAULT_THROTTLE_TIME) {
+  //   return cached.rect;
+  // }
 
   const style = window.getComputedStyle(domNode);
   if (
@@ -187,6 +187,7 @@ export const flushOutlines = (
     toolbar.textContent = `${text} · react-scan`;
   }
 
+  console.log('paint');
   void paintOutlines(
     ctx,
     scheduledOutlines.filter((outline) => {
@@ -217,24 +218,20 @@ export const paintOutline = (
     const { options } = ReactScanInternals;
     const totalFrames = unstable || options.alwaysShowLabels ? 60 : 5;
     const alpha = 0.8;
-
     if (options.log) {
       log(outline.renders);
     }
-
     const key = getOutlineKey(outline);
     const existingActiveOutline = ReactScanInternals.activeOutlines.find(
       (activeOutline) =>
         getOutlineKey(activeOutline.outline) === key &&
         activeOutline.outline.domNode === outline.domNode,
     );
-
     let renders = outline.renders;
     if (existingActiveOutline) {
       existingActiveOutline.outline.renders.push(...outline.renders);
       renders = existingActiveOutline.outline.renders;
     }
-
     let count = 0;
     let time = 0;
     for (let i = 0, len = renders.length; i < len; i++) {
@@ -242,15 +239,81 @@ export const paintOutline = (
       count += render.count;
       time += render.time;
     }
-
     const maxRenders = ReactScanInternals.options.maxRenders ?? 100;
     const t = Math.min((count * (time || 1)) / maxRenders, 1);
-
     const r = Math.round(START_COLOR.r + t * (END_COLOR.r - START_COLOR.r));
     const g = Math.round(START_COLOR.g + t * (END_COLOR.g - START_COLOR.g));
     const b = Math.round(START_COLOR.b + t * (END_COLOR.b - START_COLOR.b));
-
     const color = { r, g, b };
+
+    console.log('drawing general');
+    if (ReactScanInternals.activePropOverlays?.length) {
+      ctx.save();
+      ctx.font = '12px Monaco, monospace';
+      console.log('DRAWING!!');
+
+      ReactScanInternals.activePropOverlays.forEach((overlay) => {
+        const { rect, displayName, props } = overlay;
+
+        // Format props
+        const formattedProps = Object.entries(props).map(([key, value]) => {
+          if (value === null) return `${key}: null`;
+          if (value === undefined) return `${key}: undefined`;
+          if (typeof value === 'function') return `${key}: ƒ()`;
+          if (typeof value === 'object') {
+            return `${key}: ${Array.isArray(value) ? `Array(${value.length})` : '{…}'}`;
+          }
+          if (typeof value === 'string') return `${key}: "${value}"`;
+          return `${key}: ${String(value)}`;
+        });
+
+        const lines = [
+          `<${displayName}>`,
+          ...formattedProps.map((line) => `  ${line}`),
+        ];
+
+        // Calculate dimensions
+        const maxWidth = 300;
+        const lineHeight = 18;
+        const padding = 8;
+        const textWidth = Math.min(
+          maxWidth,
+          Math.max(...lines.map((line) => ctx.measureText(line).width)),
+        );
+        const boxWidth = textWidth + padding * 2;
+        const boxHeight = lines.length * lineHeight + padding * 2;
+
+        // Position overlay
+        let x = rect.right + 10;
+        let y = rect.top;
+
+        // Adjust if off screen
+        if (x + boxWidth > window.innerWidth) {
+          x = rect.left - boxWidth - 10;
+        }
+        if (y + boxHeight > window.innerHeight) {
+          y = window.innerHeight - boxHeight;
+        }
+
+        // Draw background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.beginPath();
+        ctx.rect(x, y, boxWidth, boxHeight);
+        ctx.fill();
+
+        // Draw text
+        ctx.fillStyle = '#ffffff';
+        lines.forEach((line, i) => {
+          ctx.fillText(
+            line,
+            x + padding,
+            y + padding + lineHeight * (i + 1) - lineHeight / 4,
+          );
+        });
+      });
+
+      ctx.restore();
+    }
 
     if (existingActiveOutline) {
       existingActiveOutline.outline.renders.push(...outline.renders);
@@ -274,7 +337,6 @@ export const paintOutline = (
         color,
       });
     }
-
     if (!animationFrameId) {
       animationFrameId = requestAnimationFrame(() => fadeOutOutline(ctx));
     }
@@ -427,11 +489,12 @@ export const fadeOutOutline = (
     animationFrameId = null;
   }
 };
-
+console.log('confirm');
 async function paintOutlines(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   outlines: PendingOutline[],
 ): Promise<void> {
+  console.log('i run!!!');
   return new Promise<void>((resolve) => {
     const { options } = ReactScanInternals;
     const totalFrames = options.alwaysShowLabels ? 60 : 30;
@@ -471,7 +534,7 @@ async function paintOutlines(
     });
 
     ReactScanInternals.activeOutlines.push(...newActiveOutlines);
-
+    console.log('fade out');
     if (!animationFrameId) {
       animationFrameId = requestAnimationFrame(() => fadeOutOutline(ctx));
     }

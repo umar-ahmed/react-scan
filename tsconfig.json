@@ -4,6 +4,7 @@
     "module": "ESNext",
     "esModuleInterop": true,
     "strictNullChecks": true,
+    "strict": true,
     "lib": ["esnext", "dom"]
   }
 }

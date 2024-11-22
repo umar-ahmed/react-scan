@@ -57,5 +57,5 @@ export const createOverlay = () => {
     recalcOutlines();
   });
 
-  return ctx;
+  return [ctx, canvas] as const;
 };
