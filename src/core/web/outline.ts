@@ -6,7 +6,7 @@ import { getLabelText } from '../utils';
 import { isOutlineUnstable, onIdle, throttle } from './utils';
 import { log } from './log';
 import { recalcOutlineColor } from './perf-observer';
-import { genId } from '../native';
+import { genId } from '../native/instrument';
 
 export const assertDom = (measurement: Measurement) => {
   if (measurement.kind !== 'dom') {
@@ -393,7 +393,7 @@ export const fadeOutOutline = (ctx: CanvasRenderingContext2D) => {
 
   for (let i = 0, len = pendingLabeledOutlines.length; i < len; i++) {
     const { alpha, outline, text } = pendingLabeledOutlines[i];
-    const { value: rect } = assertDom(outline.latestMeasurement); // todo: fix for dom
+    const { value: rect } = assertDom(outline.latestMeasurement);
     ctx.save();
 
     if (text) {

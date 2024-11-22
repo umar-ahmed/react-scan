@@ -6,7 +6,7 @@ import {
   ScaledSize,
   View,
 } from 'react-native';
-import { Measurement, MeasurementValue, ReactScanInternals } from '../..';
+import { Measurement, MeasurementValue, ReactScanInternals } from '../../index';
 
 import {
   Canvas,
@@ -22,8 +22,8 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import { Dimensions, Platform } from 'react-native';
-import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
-import { assertNative, instrumentNative } from '.';
+// import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
+import { assertNative, instrumentNative } from './instrument';
 
 // can't use useSyncExternalStore for compat
 const useIsPaused = () => {
@@ -157,7 +157,7 @@ const getTextWidth = (text: string) => {
   return (text || 'unknown').length * 7;
 };
 const ReactNativeScan = ({ id: _ }: { id: string }) => {
-  const opacity = useSharedValue(1);
+  // const opacity = useSharedValue(1);
   // todo: polly fill
   const outlines = useSyncExternalStore(
     (listener) =>
@@ -172,7 +172,7 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
     () => ReactScanInternals.activeOutlines,
   );
   // );
-  const animatedOpacity = useDerivedValue(() => opacity.value);
+  // const animatedOpacity = useDerivedValue(() => opacity.value);
 
   return (
     <Canvas
@@ -186,7 +186,7 @@ const ReactNativeScan = ({ id: _ }: { id: string }) => {
         pointerEvents: 'none',
       }}
     >
-      <Group opacity={animatedOpacity}>
+      <Group>
         {outlines
           .filter(({ outline }) => {
             const measurement = assertNative(outline.latestMeasurement).value;

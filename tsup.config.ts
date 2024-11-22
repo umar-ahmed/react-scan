@@ -1,7 +1,12 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['./src/index.ts', './src/auto.ts', './src/rsc-shim.ts'],
+  entry: [
+    './src/index.ts',
+    './src/auto.ts',
+    './src/rsc-shim.ts',
+    './src/core/native/index.ts',
+  ],
   outDir: './dist',
   splitting: false,
   sourcemap: false,
@@ -15,4 +20,16 @@ export default defineConfig({
     NODE_ENV: process.env.NODE_ENV ?? 'development',
   },
   external: ['react', 'react-dom', 'react-reconciler'],
+  esbuildOptions: (options) => {
+    options.external = [
+      'react-native',
+      '@shopify/react-native-skia',
+      'react-native-reanimated',
+    ];
+  },
+  outExtension({ format }) {
+    return {
+      js: `.${format === 'esm' ? 'mjs' : 'js'}`,
+    };
+  },
 });

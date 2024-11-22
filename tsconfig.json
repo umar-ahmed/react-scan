@@ -1,8 +1,19 @@
 {
   "compilerOptions": {
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "types": ["react-native", "@shopify/react-native-skia"],
     "jsx": "react",
+    "allowJs": true,
     "esModuleInterop": true,
-    "strictNullChecks": true,
-    "lib": ["esnext", "dom"]
-  }
+    "module": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],  
+    "target": "ESNext"  
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

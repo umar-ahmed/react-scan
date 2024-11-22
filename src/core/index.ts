@@ -156,6 +156,8 @@ export const ReactScanInternals = createStore<Internals>({
   activeOutlines: [],
 });
 
+export type ReactScanInternals = typeof ReactScanInternals;
+
 export const getReport = () => ReactScanInternals.reportData;
 
 export const setOptions = (options: Options) => {
